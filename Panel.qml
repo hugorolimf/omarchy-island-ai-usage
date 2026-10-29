@@ -490,6 +490,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             visible: root.providers.length === 0
             width: parent.width
             topPadding: Style.space(24)
@@ -633,6 +634,7 @@ Panel {
 
               Text {
                 id: balanceLabel
+                textFormat: Text.PlainText
                 text: Strings.T("Créditos pré-pagos")
                 color: Anatomy.text
                 font.family: root.fontFamily

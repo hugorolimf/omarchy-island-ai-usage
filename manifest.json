@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.hugorolimf.agents",
   "name": "Island AI Usage",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Hugo Rolim Filho",
   "license": "MIT",
   "homepage": "https://github.com/hugorolimf/omarchy-island-ai-usage",

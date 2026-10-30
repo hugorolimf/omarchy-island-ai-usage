@@ -456,6 +456,10 @@ Panel {
     }
   }
 
+  // the panel's height follows its content smoothly while open (switching provider or account)
+  property real panelHeight: column.implicitHeight
+  Behavior on panelHeight { enabled: root.opened; NumberAnimation { duration: 280; easing.type: Easing.Bezier; easing.bezierCurve: Anatomy.ease } }
+
   KeyboardPanel {
     id: panel
     anchorItem: button
@@ -466,7 +470,7 @@ Panel {
     contentWidth: panel.fittedContentWidth(Style.space(380))
     // Taller than the control panels on purpose: this one is a dashboard, and
     // the whole point is reading limits and history without scrolling.
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(640))
+    contentHeight: panel.fittedContentHeight(root.panelHeight, Style.space(640))
 
     PanelKeyCatcher {
       id: keyCatcher

@@ -24,6 +24,9 @@ the tokens by model, in a dark anatomy panel that opens under its icon.
 ## Requirements
 
 [Island Kit](https://github.com/hugorolimf/omarchy-island-kit): the panel is drawn with it.
+Without the Kit, the plugin shows an "Install Island Kit" button on the bar
+(in Portuguese, "Instale o Island Kit"); clicking it installs the Kit and
+restarts the shell.
 
 ## Install
 

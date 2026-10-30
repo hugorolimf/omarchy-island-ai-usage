@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.hugorolimf.agents",
   "name": "Island AI Usage",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "author": "Hugo Rolim Filho",
   "license": "MIT",
   "homepage": "https://github.com/hugorolimf/omarchy-island-ai-usage",
@@ -11,7 +11,7 @@
     "bar-widget"
   ],
   "entryPoints": {
-    "barWidget": "Panel.qml"
+    "barWidget": "Entry.qml"
   },
   "barWidget": {
     "displayName": "Island AI Usage",

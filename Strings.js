@@ -30,7 +30,20 @@ var en = {
  " · zera em ": " · resets in ",
  "Não deu para criar a pasta de sincronização": "Usage sync mkdir failed",
  "Não deu para ler a pasta de sincronização": "Usage sync scan failed",
- "Desconhecido": "Unknown"
+ "Desconhecido": "Unknown",
+ "CONTAS": "ACCOUNTS",
+ "Adicionar conta": "Add account",
+ "Adicionar conta do Claude": "Add a Claude account",
+ "Entra com outra conta num terminal e guarda como secundária": "Signs in another account in a terminal and saves it as a secondary",
+ "Nenhum login salvo ainda.": "No saved logins yet.",
+ "Entrar de novo": "Sign in again",
+ "Ativa": "Active",
+ "Trocando…": "Switching…",
+ "Usar": "Use",
+ "Usar esta conta": "Use this account",
+ " · limites de ": " · limits from ",
+ "Conta que o Claude usa agora, em qualquer terminal": "The account Claude uses now, in every terminal",
+ "Esquecer este login": "Forget this login"
 }
 
 function T(s) { return english && en[s] !== undefined ? en[s] : s }

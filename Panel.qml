@@ -311,12 +311,116 @@ Panel {
     nowMs = Date.now()
     if (panelFlick) panelFlick.contentY = 0
     usage.refreshLimits()
+    root.refreshAccounts()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
   Main {
     id: usage
     settings: root.settings
+  }
+
+  // --------------------------------------------------------------- accounts
+  //
+  // Saved Claude logins (accounts.py). The active one is the login Claude
+  // Code itself uses, so its meters are the LIMITES above; the others list
+  // under it with their last known limits, one click from taking its place.
+
+  readonly property bool isClaude: !!provider && provider.providerId === "claude"
+  readonly property string accountsScript: Qt.resolvedUrl("accounts.py").toString().replace(/^file:\/\//, "")
+  property var claudeAccounts: []
+  property string accountBusy: ""
+  property string accountMessage: ""
+
+  // Stroke icons this panel needs that the kit does not ship (24-unit grid).
+  readonly property string iconPlus: "M12 5v14M5 12h14"
+  readonly property string iconPerson: "M12 11.5a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5zM4.5 20a7.5 7.5 0 0 1 15 0"
+
+  function refreshAccounts() {
+    if (!accountsStatus.running) accountsStatus.running = true
+  }
+
+  function runAccountAction(args, busyId) {
+    if (accountsAction.running) return
+    accountBusy = busyId
+    accountMessage = ""
+    accountsAction.command = ["python3", "-I", accountsScript].concat(args)
+    accountsAction.running = true
+  }
+
+  function switchAccount(id) { runAccountAction(["switch", id], id) }
+  function removeAccount(id) { runAccountAction(["remove", id], id) }
+
+  function addAccount() {
+    Quickshell.execDetached(["uwsm-app", "--", "xdg-terminal-exec", "--app-id=org.omarchy.terminal",
+                             "--title=" + Strings.T("Adicionar conta do Claude"), "-e",
+                             "python3", "-I", accountsScript, "add"])
+    root.close()
+  }
+
+  // "Sessão 12% · Semanal 40%": a saved account's last reading, in the same
+  // window names the meters above use.
+  function accountSummary(account) {
+    if (!account) return ""
+    if (account.needsSignIn) return Strings.T("Entrar de novo")
+    var parts = []
+    if (account.active) parts.push(Strings.T("Ativa"))
+    if (String(account.plan || "") !== "") parts.push(Model.text(account.plan))
+    // The active account's meters are the LIMITES section right above.
+    if (account.active) return parts.join(" · ")
+    var windows = limitWindows({ limits: account.limits || [] })
+    for (var i = 0; i < windows.length && i < 2; i++)
+      parts.push(windows[i].title + " " + Math.round(windows[i].percent * 100) + "%")
+    return parts.join(" · ")
+  }
+
+  function accountTooltip(account) {
+    if (!account) return ""
+    if (account.active) return Strings.T("Conta que o Claude usa agora, em qualquer terminal")
+    var text = Strings.T("Usar esta conta")
+    var ago = Model.updatedAgo(account.limitsAt, root.nowMs)
+    if (ago !== "" && !account.needsSignIn) text += Strings.T(" · limites de ") + ago
+    return text
+  }
+
+  // A login finished in the terminal, or a switch made elsewhere, shows up
+  // while the panel is open.
+  Timer {
+    interval: 4000
+    running: root.opened && root.isClaude
+    repeat: true
+    onTriggered: root.refreshAccounts()
+  }
+
+  Process {
+    id: accountsStatus
+    command: ["python3", "-I", root.accountsScript, "status"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var data = JSON.parse(text)
+          if (data && data.ok) root.claudeAccounts = data.accounts || []
+        } catch (e) {}
+      }
+    }
+  }
+
+  Process {
+    id: accountsAction
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var data = JSON.parse(text)
+          root.accountMessage = data.ok ? "" : String(data.error || "")
+        } catch (e) {}
+      }
+    }
+    onExited: {
+      root.accountBusy = ""
+      root.refreshAccounts()
+    }
   }
 
   // Cheap enough to keep running: it only re-evaluates text bindings, and a
@@ -697,6 +801,108 @@ Panel {
             }
           }
 
+          // ---------- Accounts (Claude) ----------
+          PanelSeparator {
+            visible: accountsSection.visible
+            foreground: root.foreground
+          }
+
+          Column {
+            id: accountsSection
+            visible: root.isClaude
+            width: parent.width
+            spacing: Style.space(6)
+
+            Item {
+              width: parent.width
+              implicitHeight: Math.max(accountsHeader.implicitHeight, addAccountButton.implicitHeight)
+
+              PanelSectionHeader {
+                id: accountsHeader
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                text: Strings.T("CONTAS")
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+              }
+
+              // anatomy chip: mono caps label, washes on hover.
+              BorderSurface {
+                id: addAccountButton
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                implicitWidth: addAccountRow.implicitWidth + Style.space(14)
+                implicitHeight: addAccountRow.implicitHeight + Style.space(8)
+                radius: Anatomy.chipRadius
+                color: addAccountMouse.containsMouse ? Anatomy.hover : Anatomy.faint
+                borderSpec: Border.none()
+
+                Behavior on color { ColorAnimation { duration: Anatomy.fast } }
+
+                Row {
+                  id: addAccountRow
+                  anchors.centerIn: parent
+                  spacing: Style.space(5)
+
+                  AnatomyIcon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    path: root.iconPlus
+                    size: Style.font.caption + 2
+                    color: addAccountMouse.containsMouse ? Anatomy.strong : Anatomy.hi
+                  }
+
+                  Text {
+                    textFormat: Text.PlainText
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: Strings.T("Adicionar conta")
+                    color: addAccountMouse.containsMouse ? Anatomy.strong : Anatomy.text
+                    font.family: Anatomy.mono
+                    font.pixelSize: Math.max(9, Style.font.caption)
+                    font.weight: Font.Medium
+                    font.letterSpacing: 0.5
+                    font.capitalization: Font.AllUppercase
+                  }
+                }
+
+                MouseArea {
+                  id: addAccountMouse
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.addAccount()
+                }
+
+                PanelToolTip {
+                  visible: addAccountMouse.containsMouse
+                  text: Strings.T("Entra com outra conta num terminal e guarda como secundária")
+                  fontFamily: root.fontFamily
+                }
+              }
+            }
+
+            Repeater {
+              model: root.claudeAccounts
+
+              AccountRow {
+                required property var modelData
+                width: accountsSection.width
+                account: modelData
+              }
+            }
+
+            Text {
+              textFormat: Text.PlainText
+              visible: text !== ""
+              width: parent.width
+              text: root.accountMessage !== "" ? root.accountMessage
+                : (root.claudeAccounts.length === 0 ? Strings.T("Nenhum login salvo ainda.") : "")
+              color: root.accountMessage !== "" ? Anatomy.red : root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              wrapMode: Text.WordWrap
+            }
+          }
+
           // ---------- Usage ----------
           PanelSeparator {
             visible: usageSection.visible
@@ -882,6 +1088,145 @@ Panel {
       width: parent.width
       value: limitRow.percent
       fill: root.limitColor(limitRow.percent)
+    }
+  }
+
+  // A saved login. The active one sits first in the blue "current" tint; a
+  // secondary switches in on click, and offers USAR / forget on hover.
+  component AccountRow: CursorSurface {
+    id: accountRow
+    property var account: null
+
+    readonly property bool isActive: !!account && account.active === true
+    readonly property bool busy: !!account && root.accountBusy === account.id
+    readonly property bool hot: accountMouse.containsMouse || useButton.hovering || forgetButton._hot
+
+    current: isActive
+    hasCursor: hot && !isActive
+    foreground: Anatomy.text
+    implicitHeight: accountContent.implicitHeight + Style.spacing.rowPaddingX
+
+    MouseArea {
+      id: accountMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: accountRow.isActive ? Qt.ArrowCursor : Qt.PointingHandCursor
+      onClicked: if (!accountRow.isActive && !accountRow.busy) root.switchAccount(accountRow.account.id)
+    }
+
+    PanelToolTip {
+      visible: accountMouse.containsMouse
+      text: root.accountTooltip(accountRow.account)
+      fontFamily: root.fontFamily
+    }
+
+    Item {
+      id: accountContent
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.leftMargin: Style.space(10)
+      anchors.rightMargin: Style.space(8)
+      implicitHeight: Math.max(accountIcon.implicitHeight, accountInfo.implicitHeight, useButton.implicitHeight)
+
+      AnatomyIcon {
+        id: accountIcon
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
+        path: root.iconPerson
+        size: Style.font.heading
+        color: accountRow.isActive ? Anatomy.blue : Anatomy.hi
+      }
+
+      Column {
+        id: accountInfo
+        spacing: Style.space(1)
+        anchors.left: accountIcon.right
+        anchors.leftMargin: Style.space(10)
+        anchors.right: actions.visible ? actions.left : parent.right
+        anchors.rightMargin: actions.visible ? Style.space(8) : 0
+        anchors.verticalCenter: parent.verticalCenter
+
+        Text {
+          textFormat: Text.PlainText
+          width: parent.width
+          text: accountRow.account ? (accountRow.account.name || accountRow.account.email) : ""
+          color: accountRow.isActive || accountRow.hot ? Anatomy.strong : Anatomy.text
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.body
+          font.weight: accountRow.isActive ? Font.Medium : Font.Normal
+          elide: Text.ElideRight
+        }
+
+        Text {
+          textFormat: Text.PlainText
+          width: parent.width
+          text: (accountRow.busy ? (accountRow.isActive ? "" : Strings.T("Trocando…")) : root.accountSummary(accountRow.account)).toUpperCase()
+          color: accountRow.account && accountRow.account.needsSignIn ? Anatomy.amber
+            : (accountRow.isActive ? Anatomy.blue : Anatomy.muted)
+          font.family: Anatomy.mono
+          font.pixelSize: Style.font.caption
+          font.letterSpacing: Anatomy.labelSpacing / 2
+          elide: Text.ElideRight
+        }
+      }
+
+      Row {
+        id: actions
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.space(4)
+        visible: !accountRow.isActive && !accountRow.busy && accountRow.hot
+
+        BorderSurface {
+          id: useButton
+          property bool hovering: useMouse.containsMouse
+          anchors.verticalCenter: parent.verticalCenter
+          implicitWidth: useLabel.implicitWidth + Style.space(14)
+          implicitHeight: useLabel.implicitHeight + Style.space(8)
+          radius: Anatomy.chipRadius
+          color: useMouse.containsMouse ? Anatomy.alpha(Anatomy.blue, 0.22) : Anatomy.faint
+          borderSpec: Border.none()
+
+          Text {
+            id: useLabel
+            textFormat: Text.PlainText
+            anchors.centerIn: parent
+            text: Strings.T("Usar")
+            color: useMouse.containsMouse ? Anatomy.strong : Anatomy.text
+            font.family: Anatomy.mono
+            font.pixelSize: Math.max(9, Style.font.caption)
+            font.weight: Font.Medium
+            font.letterSpacing: 0.5
+            font.capitalization: Font.AllUppercase
+          }
+
+          MouseArea {
+            id: useMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.switchAccount(accountRow.account.id)
+          }
+        }
+
+        PanelActionButton {
+          id: forgetButton
+          anchors.verticalCenter: parent.verticalCenter
+          tooltipText: Strings.T("Esquecer este login")
+          foreground: Anatomy.mid
+          hoverColor: Anatomy.red
+          fontFamily: Anatomy.sans
+          onClicked: root.removeAccount(accountRow.account.id)
+
+          AnatomyIcon {
+            anchors.centerIn: parent
+            path: Anatomy.icons.close
+            size: Style.font.subtitle
+            color: forgetButton._hot ? Anatomy.red : Anatomy.mid
+          }
+        }
+      }
     }
   }
 
